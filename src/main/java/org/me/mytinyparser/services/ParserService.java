@@ -3,6 +3,8 @@ package org.me.mytinyparser.services;
 import jakarta.servlet.http.HttpServletRequest;
 import org.me.mytinyparser.enums.States;
 import org.me.mytinyparser.utils.BoundedInputStream;
+import org.me.mytinyparser.utils.ContentDisposition;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,14 +17,16 @@ public class ParserService {
 
     private final HttpServletRequest httpServletRequest;
     private final byte[] boundaryName;
-    private States state = FINDING_BOUNDARY;
+    private States state = LOOKING_BOUNDARY;
+    private final String rawBoundary;
 
     public ParserService(HttpServletRequest servletRequest) {
         this.httpServletRequest = servletRequest;
 
         String contentType = httpServletRequest.getContentType();
         if (contentType != null && contentType.contains("boundary=")) {
-            this.boundaryName = contentType.substring(contentType.indexOf("boundary=") +9).getBytes();
+            rawBoundary = contentType.substring(contentType.indexOf("boundary=") +9);
+            this.boundaryName = ("--" + rawBoundary).getBytes();
         }
         else {
             throw new RuntimeException();
@@ -30,7 +34,7 @@ public class ParserService {
     }
 
 
-    public String extractContentDisposition(InputStream inputStream) {
+    public ContentDisposition extractContentDisposition(InputStream inputStream) {
         byte[] buffer = new byte[8192];
         int byteRead;
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -59,10 +63,15 @@ public class ParserService {
                         dispositionContent.append(streamContent);
                     }
 
-                    int tailStart = Math.max(0, streamContent.length() - 3);
-                    byte[] tail = streamContent.substring(tailStart).getBytes();
-                    outputStream.reset();
-                    outputStream.write(tail);
+                    if (state != FOUND_DISPOSITION) {
+                        int tailStart = Math.max(0, streamContent.length() - 3);
+                        byte[] tail = streamContent.substring(tailStart).getBytes();
+                        outputStream.reset();
+                        outputStream.write(tail);
+                    }
+                    else {
+                        outputStream.reset();
+                    }
                 }
 
             }
@@ -72,13 +81,35 @@ public class ParserService {
             throw new RuntimeException(e);
         }
 
-        return dispositionContent.toString();
+        state = LOOKING_BOUNDARY;
+
+        return parseContentDisposition(dispositionContent.toString());
     }
 
     public BoundedInputStream extractResourceContent(InputStream inputStream) throws IOException {
-        BoundedInputStream boundedInputStream = new BoundedInputStream(inputStream, boundaryName);
+        byte[] boundary = ("\r\n--" + rawBoundary).getBytes();
+        return new BoundedInputStream(inputStream, boundary);
+    }
 
-        return boundedInputStream;
+    private ContentDisposition parseContentDisposition(String raw) {
+        int start = raw.indexOf("Content-Disposition:") + "Content-Disposition:".length();
+        int end = raw.indexOf("\r\n", start);
+        String line = raw.substring(start, end).trim();
+
+        String type = line.contains(";")
+                ? line.substring(0, line.indexOf(";")).trim()
+                : line.trim();
+
+        return new ContentDisposition(extractParam(line, "filename"), extractParam(line, "name"), type);
+    }
+
+    private String extractParam(String line, String param) {
+        String key = param + "=\"";
+        int start = line.indexOf(key);
+        if (start == -1) return null;
+        start += key.length();
+        int end = line.indexOf("\"", start);
+        return line.substring(start, end);
     }
 
 }

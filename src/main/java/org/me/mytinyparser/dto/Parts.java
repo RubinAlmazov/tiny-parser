@@ -1,11 +1,11 @@
 package org.me.mytinyparser.dto;
 
+import org.me.mytinyparser.utils.ContentDisposition;
+
 import java.io.InputStream;
-import java.util.Map;
 
 public record Parts(
-        Map<String, String> headers,
-        String fileName,
+        ContentDisposition contentDisposition,
         InputStream resourceContent
 ) {
 }
