@@ -2,7 +2,7 @@ package org.me.mytinyparser.services;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.me.mytinyparser.enums.States;
-
+import org.me.mytinyparser.utils.BoundedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -75,9 +75,10 @@ public class ParserService {
         return dispositionContent.toString();
     }
 
-    public InputStream extractResourceContent(InputStream inputStream) {
-        // some logic
-        return inputStream;
+    public BoundedInputStream extractResourceContent(InputStream inputStream) throws IOException {
+        BoundedInputStream boundedInputStream = new BoundedInputStream(inputStream, boundaryName);
+
+        return boundedInputStream;
     }
 
 }
