@@ -15,38 +15,35 @@ import static org.me.mytinyparser.utils.ParserUtils.containsSubArray;
 
 public class ParserService {
 
-    private final HttpServletRequest httpServletRequest;
     private final byte[] boundaryName;
     private States state = LOOKING_BOUNDARY;
     private final String rawBoundary;
+    private final InputStream inputStream;
 
-    public ParserService(HttpServletRequest servletRequest) {
-        this.httpServletRequest = servletRequest;
-
-        String contentType = httpServletRequest.getContentType();
+    public ParserService(HttpServletRequest servletRequest) throws IOException {
+        String contentType = servletRequest.getContentType();
         if (contentType != null && contentType.contains("boundary=")) {
-            rawBoundary = contentType.substring(contentType.indexOf("boundary=") +9);
+            rawBoundary = contentType.substring(contentType.indexOf("boundary=") + 9);
             this.boundaryName = ("--" + rawBoundary).getBytes();
-        }
-        else {
+        } else {
             throw new RuntimeException();
         }
+        this.inputStream = servletRequest.getInputStream();
     }
 
 
-    public ContentDisposition extractContentDisposition(InputStream inputStream) {
+    public ContentDisposition extractContentDisposition() {
         byte[] buffer = new byte[8192];
-        int byteRead;
+        int byteRead = 0;
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         StringBuilder dispositionContent = new StringBuilder();
-
 
         try {
             while (state != FOUND_DISPOSITION && (byteRead = inputStream.read(buffer)) != -1) {
                 outputStream.write(buffer, 0, byteRead);
                 int boundaryIndex = containsSubArray(outputStream.toByteArray(), boundaryName);
 
-                if (state != FOUND_BOUNDARY &&  boundaryIndex != -1) {
+                if (state != FOUND_BOUNDARY && boundaryIndex != -1) {
                     state = FOUND_BOUNDARY;
                 }
 
@@ -58,35 +55,34 @@ public class ParserService {
 
                     if (boundaryIndex != -1) {
                         dispositionContent.append(streamContent.substring(boundaryIndex));
-                    }
-                    else {
+                    } else {
                         dispositionContent.append(streamContent);
                     }
 
                     if (state != FOUND_DISPOSITION) {
-                        int tailStart = Math.max(0, streamContent.length() - 3);
-                        byte[] tail = streamContent.substring(tailStart).getBytes();
+                        int tailStart = Math.max(0, outputStream.size() - (boundaryName.length - 1));
+                        byte[] tail = outputStream.toByteArray();
+                        tail = java.util.Arrays.copyOfRange(tail, tailStart, tail.length);
                         outputStream.reset();
                         outputStream.write(tail);
-                    }
-                    else {
+                    } else {
                         outputStream.reset();
                     }
                 }
-
             }
-
 
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
-        state = LOOKING_BOUNDARY;
+
+
+        state = (byteRead != -1) ? LOOKING_BOUNDARY : REACHED_END;
 
         return parseContentDisposition(dispositionContent.toString());
     }
 
-    public BoundedInputStream extractResourceContent(InputStream inputStream) throws IOException {
+    public BoundedInputStream extractResourceContent() throws IOException {
         byte[] boundary = ("\r\n--" + rawBoundary).getBytes();
         return new BoundedInputStream(inputStream, boundary);
     }
@@ -112,4 +108,7 @@ public class ParserService {
         return line.substring(start, end);
     }
 
+    public States getState() {
+        return state;
+    }
 }
