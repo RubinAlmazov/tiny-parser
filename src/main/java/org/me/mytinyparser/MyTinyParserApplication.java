@@ -29,7 +29,7 @@ public class MyTinyParserApplication {
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             content.transferTo(buffer);
 
-            partsList.add(new Parts(contentDisposition, new ByteArrayInputStream(buffer.toByteArray())));
+            partsList.add(new Parts(contentDisposition, new ByteArrayInputStream(buffer.toByteArray()), buffer.size()));
         }
 
         return partsList;

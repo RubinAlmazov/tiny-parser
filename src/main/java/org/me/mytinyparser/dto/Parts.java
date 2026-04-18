@@ -6,7 +6,8 @@ import java.io.InputStream;
 
 public record Parts(
         ContentDisposition contentDisposition,
-        InputStream resourceContent
+        InputStream resourceContent,
+        int size
 ) {
 }
 
