@@ -5,10 +5,13 @@ import org.me.mytinyparser.enums.States;
 import org.me.mytinyparser.utils.BoundedInputStream;
 import org.me.mytinyparser.utils.ContentDisposition;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 import static org.me.mytinyparser.enums.States.*;
 import static org.me.mytinyparser.utils.ParserUtils.containsSubArray;
@@ -19,6 +22,7 @@ public class ParserService {
     private States state = LOOKING_BOUNDARY;
     private final String rawBoundary;
     private final InputStream inputStream;
+    private byte[] leftover = new byte[0];
 
     public ParserService(HttpServletRequest servletRequest) throws IOException {
         String contentType = servletRequest.getContentType();
@@ -66,6 +70,11 @@ public class ParserService {
                         outputStream.reset();
                         outputStream.write(tail);
                     } else {
+                        byte[] all = outputStream.toByteArray();
+                        int sepEnd = containsSubArray(all, new byte[] {'\r', '\n', '\r', '\n'});
+                        if (sepEnd != -1 && sepEnd < all.length) {
+                            leftover = Arrays.copyOfRange(all, sepEnd, all.length);
+                        }
                         outputStream.reset();
                     }
                 }
@@ -79,12 +88,21 @@ public class ParserService {
 
         state = (byteRead != -1) ? LOOKING_BOUNDARY : REACHED_END;
 
-        return parseContentDisposition(dispositionContent.toString());
+        String raw = dispositionContent.toString();
+        if (state == REACHED_END && !raw.contains("Content-Disposition:")) {
+            return null;
+        }
+
+        return parseContentDisposition(raw);
     }
 
     public BoundedInputStream extractResourceContent() throws IOException {
         byte[] boundary = ("\r\n--" + rawBoundary).getBytes();
-        return new BoundedInputStream(inputStream, boundary);
+        InputStream source = leftover.length > 0
+                ? new SequenceInputStream(new ByteArrayInputStream(leftover), inputStream)
+                : inputStream;
+        leftover = new byte[0];
+        return new BoundedInputStream(source, boundary);
     }
 
     private ContentDisposition parseContentDisposition(String raw) {

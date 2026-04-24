@@ -14,6 +14,9 @@ public class BoundedInputStream extends InputStream {
         this.source = stream;
         this.boundary = boundary;
         this.buffer = source.readNBytes(boundary.length);
+        if (this.buffer.length < boundary.length) {
+            this.tailPos = 0;
+        }
     }
 
     @Override
